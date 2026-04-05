@@ -1,0 +1,8 @@
+*.ini
+*.pem
+.env
+voice.mp3
+
+.claude/
+CLAUDE.md
+cf-failover
