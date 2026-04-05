@@ -1,4 +1,4 @@
-# cf-failover
+# octopus-dns-failover
 
 Cloudflare DNS failover monitor for octopus-review.ai. Runs on AWS, health checks the primary (Proxmox/Tunnel) origin via dual-check (HTTP + Tunnel API), and switches DNS to AWS failover IP when primary is down. Notifies via Slack and Twilio phone calls.
 
