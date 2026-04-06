@@ -53,7 +53,9 @@ type State struct {
 	ConsecutiveOKs   int
 	LastCheck        time.Time
 	LastSwitch       time.Time
-	LastSlackEvent   string // "failover" or "failback" - prevents duplicate notifications
+	LastSlackEvent   string    // "failover" or "failback" - prevents duplicate notifications
+	LastTwilioCall   time.Time // cooldown: don't call again within 30 minutes
+	TwilioCallPending bool    // true if a delayed call is already scheduled
 }
 
 // Cloudflare API types
@@ -195,7 +197,14 @@ func runCheck(client *http.Client, cfg Config, state *State) {
 					cfg.Domain, cfg.FailThreshold, cfg.FailoverIP,
 				)
 				sendSlack(cfg.SlackWebhookURL, msg)
-				go delayedTwilioCall(cfg, state)
+				if !state.TwilioCallPending && time.Since(state.LastTwilioCall) > 30*time.Minute {
+					state.TwilioCallPending = true
+					go delayedTwilioCall(cfg, state)
+				} else if state.TwilioCallPending {
+					log.Printf("Twilio call already pending, skipping")
+				} else {
+					log.Printf("Twilio cooldown active (last call %s ago), skipping", time.Since(state.LastTwilioCall).Round(time.Second))
+				}
 			}
 		}
 	}
@@ -495,6 +504,8 @@ func sendSlack(webhookURL, message string) {
 
 // delayedTwilioCall waits 5 minutes, then calls if still on failover.
 func delayedTwilioCall(cfg Config, state *State) {
+	defer func() { state.TwilioCallPending = false }()
+
 	delay := 5 * time.Minute
 	log.Printf("Twilio call scheduled in %s (will cancel if primary recovers)", delay)
 	time.Sleep(delay)
@@ -505,6 +516,7 @@ func delayedTwilioCall(cfg Config, state *State) {
 	}
 
 	log.Printf("Still on failover after %s, initiating calls", delay)
+	state.LastTwilioCall = time.Now()
 	twilioCallChain(cfg, fmt.Sprintf("%s has been on failover for %s", cfg.Domain, delay))
 }
 
