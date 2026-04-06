@@ -54,6 +54,7 @@ type State struct {
 	LastCheck        time.Time
 	LastSwitch       time.Time
 	LastSlackEvent   string    // "failover" or "failback" - prevents duplicate notifications
+	LastSlackTime    time.Time // cooldown: don't spam Slack during flapping
 	LastTwilioCall   time.Time // cooldown: don't call again within 30 minutes
 	TwilioCallPending bool    // true if a delayed call is already scheduled
 }
@@ -170,13 +171,16 @@ func runCheck(client *http.Client, cfg Config, state *State) {
 
 		if state.CurrentOrigin == "failover" && state.ConsecutiveOKs >= cfg.RecoverThreshold {
 			log.Printf("Tunnel recovered (%d consecutive OKs). Switching back to primary.", state.ConsecutiveOKs)
-			if switchToPrimary(client, cfg, state) && state.LastSlackEvent != "failback" {
-				state.LastSlackEvent = "failback"
-				msg := fmt.Sprintf(
-					":white_check_mark: *%s failback to PRIMARY*\nPrimary recovered after %s on failover.\nDNS updated to tunnel CNAME.",
-					cfg.Domain, time.Since(state.LastSwitch).Round(time.Second),
-				)
-				sendSlack(cfg.SlackWebhookURL, msg)
+			if switchToPrimary(client, cfg, state) {
+				if state.LastSlackEvent != "failback" || time.Since(state.LastSlackTime) > 5*time.Minute {
+					state.LastSlackEvent = "failback"
+					state.LastSlackTime = time.Now()
+					msg := fmt.Sprintf(
+						":white_check_mark: *%s failback to PRIMARY*\nPrimary recovered after %s on failover.\nDNS updated to tunnel CNAME.",
+						cfg.Domain, time.Since(state.LastSwitch).Round(time.Second),
+					)
+					sendSlack(cfg.SlackWebhookURL, msg)
+				}
 			}
 		} else if state.CurrentOrigin == "primary" {
 			if state.ConsecutiveOKs%10 == 0 {
@@ -190,13 +194,16 @@ func runCheck(client *http.Client, cfg Config, state *State) {
 
 		if state.CurrentOrigin == "primary" && state.ConsecutiveFails >= cfg.FailThreshold {
 			log.Printf("Tunnel DOWN (%d consecutive failures). Switching to failover.", state.ConsecutiveFails)
-			if switchToFailover(client, cfg, state) && state.LastSlackEvent != "failover" {
-				state.LastSlackEvent = "failover"
-				msg := fmt.Sprintf(
-					":rotating_light: *%s FAILOVER to AWS*\nPrimary failed %d consecutive health checks.\nDNS updated to AWS IP: `%s`\nMonitoring for recovery...",
-					cfg.Domain, cfg.FailThreshold, cfg.FailoverIP,
-				)
-				sendSlack(cfg.SlackWebhookURL, msg)
+			if switchToFailover(client, cfg, state) {
+				if state.LastSlackEvent != "failover" || time.Since(state.LastSlackTime) > 5*time.Minute {
+					state.LastSlackEvent = "failover"
+					state.LastSlackTime = time.Now()
+					msg := fmt.Sprintf(
+						":rotating_light: *%s FAILOVER to AWS*\nPrimary failed %d consecutive health checks.\nDNS updated to AWS IP: `%s`\nMonitoring for recovery...",
+						cfg.Domain, cfg.FailThreshold, cfg.FailoverIP,
+					)
+					sendSlack(cfg.SlackWebhookURL, msg)
+				}
 				if !state.TwilioCallPending && time.Since(state.LastTwilioCall) > 30*time.Minute {
 					state.TwilioCallPending = true
 					go delayedTwilioCall(cfg, state)
