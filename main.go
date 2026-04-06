@@ -513,7 +513,7 @@ func sendSlack(webhookURL, message string) {
 func delayedTwilioCall(cfg Config, state *State) {
 	defer func() { state.TwilioCallPending = false }()
 
-	delay := 5 * time.Minute
+	delay := 1 * time.Minute
 	log.Printf("Twilio call scheduled in %s (will cancel if primary recovers)", delay)
 	time.Sleep(delay)
 
