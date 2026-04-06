@@ -4,33 +4,10 @@ services:
     image: cf-failover:latest
     container_name: cf-failover
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      # Health check
-      CHECK_INTERVAL: "5s"
-      FAIL_THRESHOLD: "3"
-      RECOVER_THRESHOLD: "3"
-      REQUEST_TIMEOUT: "10s"
-
-      # Cloudflare API
-      CF_API_TOKEN: "${CF_API_TOKEN}"
-      CF_ACCOUNT_ID: "${CF_ACCOUNT_ID}"
-      CF_ZONE_ID: "${CF_ZONE_ID}"
       DOMAIN: "octopus-review.ai"
-
-      # Origins
-      PRIMARY_CNAME: "${PRIMARY_CNAME}"
-      FAILOVER_IP: "${FAILOVER_IP}"
-
-      # Slack
-      SLACK_WEBHOOK_URL: "${SLACK_WEBHOOK_URL}"
-
-      # Twilio
-      TWILIO_ACCOUNT_SID: "${TWILIO_ACCOUNT_SID}"
-      TWILIO_AUTH_TOKEN: "${TWILIO_AUTH_TOKEN}"
-      TWILIO_FROM_NUMBER: "${TWILIO_FROM_NUMBER}"
-      TWILIO_TO_NUMBER: "${TWILIO_TO_NUMBER}"
-
-      # Safety: set to "true" to test without changing DNS
       DRY_RUN: "false"
     logging:
       driver: json-file
