@@ -206,7 +206,7 @@ func runCheck(client *http.Client, cfg Config, state *State) {
 				}
 				if !state.TwilioCallPending && time.Since(state.LastTwilioCall) > 30*time.Minute {
 					state.TwilioCallPending = true
-					go delayedTwilioCall(cfg, state)
+					go triggerTwilioCall(cfg, state)
 				} else if state.TwilioCallPending {
 					log.Printf("Twilio call already pending, skipping")
 				} else {
@@ -509,22 +509,11 @@ func sendSlack(webhookURL, message string) {
 	}
 }
 
-// delayedTwilioCall waits 5 minutes, then calls if still on failover.
-func delayedTwilioCall(cfg Config, state *State) {
+// triggerTwilioCall initiates the call chain in a goroutine.
+func triggerTwilioCall(cfg Config, state *State) {
 	defer func() { state.TwilioCallPending = false }()
-
-	delay := 1 * time.Minute
-	log.Printf("Twilio call scheduled in %s (will cancel if primary recovers)", delay)
-	time.Sleep(delay)
-
-	if state.CurrentOrigin != "failover" {
-		log.Printf("Primary recovered before call delay, skipping Twilio call")
-		return
-	}
-
-	log.Printf("Still on failover after %s, initiating calls", delay)
 	state.LastTwilioCall = time.Now()
-	twilioCallChain(cfg, fmt.Sprintf("%s has been on failover for %s", cfg.Domain, delay))
+	twilioCallChain(cfg, fmt.Sprintf("%s has failed over to AWS", cfg.Domain))
 }
 
 // twilioCallChain calls each number in order. If one answers, stop.
